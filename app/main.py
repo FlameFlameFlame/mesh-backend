@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .logging_config import setup_logging
 from .routes.health import router as health_router
 from .routes.roads import router as roads_router
+from .routes.optimize import router as optimize_router
 
 
 @asynccontextmanager
@@ -26,3 +27,4 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(roads_router)
+app.include_router(optimize_router)
