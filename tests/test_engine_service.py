@@ -86,7 +86,9 @@ def test_compute_boundary():
 @patch("app.services.engine.load_sites")
 @patch("app.services.engine.load_roads")
 @patch("app.services.engine.load_boundary")
+@patch("app.services.engine.generate_report")
 def test_run_optimize_calls_pipeline(
+    mock_generate_report,
     mock_load_boundary,
     mock_load_roads,
     mock_load_sites,
@@ -107,6 +109,9 @@ def test_run_optimize_calls_pipeline(
     mock_surface.cells = {}
     mock_mesh_surface.return_value = mock_surface
     mock_build_routing.return_value = MagicMock()
+    mock_generate_report.side_effect = lambda _surface, path: (
+        open(path, "w").write(json.dumps({"total_towers": 0}))
+    )
 
     result = run_optimize(SAMPLE_SITES, SAMPLE_ROADS)
 
