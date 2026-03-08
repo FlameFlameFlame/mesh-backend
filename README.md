@@ -1,5 +1,8 @@
 Note: All of the code was written by LLMs: Claude Code and ChatGPT.
 
+[![Unit Tests](https://github.com/FlameFlameFlame/mesh-backend/actions/workflows/unit-tests.yml/badge.svg?branch=main)](https://github.com/FlameFlameFlame/mesh-backend/actions/workflows/unit-tests.yml)
+[![Smoke Tests](https://github.com/FlameFlameFlame/mesh-backend/actions/workflows/smoke-tests.yml/badge.svg?branch=main)](https://github.com/FlameFlameFlame/mesh-backend/actions/workflows/smoke-tests.yml)
+
 # Project Description
 mesh-backend is a FastAPI service for the mesh planner application. It exposes planner APIs and can serve the built frontend bundle.
 

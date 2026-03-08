@@ -1,0 +1,45 @@
+name: Smoke Tests
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  smoke-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+
+      - name: Checkout mesh-calculator dependency
+        uses: actions/checkout@v4
+        with:
+          repository: FlameFlameFlame/mesh-calculator
+          path: mesh_calculator
+
+      - name: Link mesh_calculator as sibling path dependency
+        run: ln -sfn "$GITHUB_WORKSPACE/mesh_calculator" "$GITHUB_WORKSPACE/../mesh_calculator"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev libspatialindex-dev
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run smoke test
+        run: uv run pytest tests/test_v2_api.py -v
