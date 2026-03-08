@@ -3,8 +3,16 @@ import json
 import os
 import tempfile
 import threading
+from datetime import datetime, timezone
 
 from flask import Response, jsonify, request
+
+
+def _build_optimization_log_path(output_dir: str | None) -> str | None:
+    if not output_dir:
+        return None
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return os.path.join(output_dir, "logs", f"optimization_{ts}.log")
 
 
 def _probe_lat_lon_for_grid_provider(app_mod):
@@ -97,11 +105,16 @@ def run_optimization(app_mod):
     app_mod._active_mesh_parameters = dict(param_overrides)
     persist_outputs = bool((body.get("project_name") or "").strip() or (body.get("output_dir") or "").strip())
     try:
-        output_dir = app_mod._resolve_project_output_dir(body)
+        resolved_output_dir = app_mod._resolve_project_output_dir(body)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    log_file_path = _build_optimization_log_path(resolved_output_dir)
+    if log_file_path:
+        app_mod.logger.info("Optimization log file: %s", log_file_path)
     if not persist_outputs:
         output_dir = None
+    else:
+        output_dir = resolved_output_dir
 
     valid_fields = MeshConfig.__dataclass_fields__
     mesh_config = MeshConfig(**{k: v for k, v in param_overrides.items() if k in valid_fields})
@@ -138,7 +151,7 @@ def run_optimization(app_mod):
     if city_features:
         city_boundaries_geojson = {"type": "FeatureCollection", "features": city_features}
 
-    app_mod._job_manager.prepare_new_job()
+    app_mod._job_manager.prepare_new_job(log_file_path=log_file_path)
     if low_mast_warning:
         app_mod._job_manager.put(f"WARNING: {low_mast_warning}")
 
@@ -260,7 +273,11 @@ def run_optimization(app_mod):
             app_mod._opt_running = False
 
     threading.Thread(target=_run_pipeline, daemon=True).start()
-    return jsonify({"started": True, "warning": low_mast_warning})
+    return jsonify({
+        "started": True,
+        "warning": low_mast_warning,
+        "log_file": app_mod._job_manager.log_file_path,
+    })
 
 
 def cancel_optimization(app_mod):
