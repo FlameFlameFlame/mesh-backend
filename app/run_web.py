@@ -1,5 +1,6 @@
 import argparse
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,46 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if not raw:
         return default
     return raw in {"1", "true", "yes", "on"}
+
+
+def _run_backend(cmd: list[str], *, cwd: Path, env: dict[str, str]) -> int:
+    use_process_group = os.name != "nt"
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        env=env,
+        start_new_session=use_process_group,
+    )
+
+    def _signal_proc(sig: int) -> None:
+        if use_process_group:
+            try:
+                os.killpg(proc.pid, sig)
+                return
+            except Exception:
+                pass
+        proc.send_signal(sig)
+
+    try:
+        return proc.wait()
+    except KeyboardInterrupt:
+        print("\n[mesh-web] Ctrl+C received, shutting down backend gracefully...")
+        try:
+            _signal_proc(signal.SIGINT)
+        except Exception:
+            pass
+        try:
+            return proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            print("[mesh-web] Backend did not exit after SIGINT; terminating...")
+            _signal_proc(signal.SIGTERM)
+            try:
+                return proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                print("[mesh-web] Backend did not terminate; killing process.")
+                _signal_proc(signal.SIGKILL)
+                proc.wait(timeout=5)
+                return 130
 
 
 def main() -> int:
@@ -69,7 +110,7 @@ def main() -> int:
         str(args.port),
     ]
     print(f"[mesh-web] Starting backend with FRONTEND_DIST_DIR={dist_dir}")
-    return subprocess.call(cmd, cwd=backend_dir, env=env)
+    return _run_backend(cmd, cwd=backend_dir, env=env)
 
 
 if __name__ == "__main__":
