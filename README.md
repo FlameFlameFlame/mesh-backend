@@ -1,68 +1,25 @@
-# mesh-backend
+Note: All of the code was written by LLMs: Claude Code and ChatGPT.
 
-Backend service for the mesh planner UI and calculation APIs.
+# Project Description
+mesh-backend is a FastAPI service for the mesh planner application. It exposes planner APIs and can serve the built frontend bundle.
 
-## What it serves
-
-- `/api/v2/*` endpoints (projects, sites, pipeline, optimization, coverage, load/export, SSE)
-- Frontend static assets from `FRONTEND_DIST_DIR` (or `../mesh-generator/dist` by default)
-
-## Run
-
+# How to Run It
 ```bash
+uv sync
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-## One-command Run (build frontend + start backend)
+Or run the helper entrypoint:
 
 ```bash
 uv run mesh-web
 ```
 
-Optional flags:
+If you want to serve a specific frontend build:
 
 ```bash
-uv run mesh-web --host 127.0.0.1 --port 8000
-uv run mesh-web --skip-build
-uv run mesh-web --frontend-dir /path/to/mesh-generator
+FRONTEND_DIST_DIR=../mesh-generator/dist uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-## Serve a specific frontend build
-
-```bash
-FRONTEND_DIST_DIR=/Users/timur/Documents/src/LoraMeshPlanner/mesh-generator/dist \
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-Then open `http://127.0.0.1:8000`.
-
-## Health check
-
-```bash
-curl http://127.0.0.1:8000/api/v2/health
-```
-
-## Optimization Logs
-
-- Live UI stream: Optimization panel -> Optimization Log.
-- Per-run file logs: saved under `<project_dir>/logs/optimization_*.log`.
-- `POST /api/v2/run-optimization` now returns `log_file` with the exact path.
-
-Server stdout is the terminal where you launched `uv run mesh-web` (or `uvicorn`).
-`mesh_calculator.*` logs now stream there explicitly at `LOG_LEVEL` (default `INFO`).
-
-Examples:
-
-```bash
-# Save stdout/stderr to a file while still seeing it in terminal
-uv run mesh-web 2>&1 | tee /tmp/mesh-web.log
-
-# Follow saved process output
-tail -f /tmp/mesh-web.log
-```
-
-Set a different log level:
-
-```bash
-LOG_LEVEL=DEBUG uv run mesh-web
-```
+# High-Level Implementation Details
+The service is structured around `app/` modules and serves `/api/v2/*` endpoints for projects, optimization workflows, and result handling. It integrates `mesh_calculator` for optimization and radio-planning computations, and mounts static frontend files from a configured `FRONTEND_DIST_DIR` directory.
