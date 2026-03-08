@@ -217,10 +217,29 @@ class _QueueLogHandler(logging.Handler):
                 msg = f'[{label}] {msg}'
             _job_manager.put(msg)
 
-# Attach queue handler to mesh_calculator logger at module load time
+def _mesh_log_level() -> int:
+    raw = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
+    return getattr(logging, raw, logging.INFO)
+
+
+# Attach queue and stdout handlers to mesh_calculator logger at module load time
 _queue_handler = _QueueLogHandler()
 _queue_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
-logging.getLogger("mesh_calculator").addHandler(_queue_handler)
+_queue_handler._is_mesh_sse_handler = True  # type: ignore[attr-defined]
+
+_stdout_mesh_handler = logging.StreamHandler(stream=sys.stdout)
+_stdout_mesh_handler.setFormatter(
+    logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+)
+_stdout_mesh_handler._is_mesh_stdout_handler = True  # type: ignore[attr-defined]
+
+_mesh_calc_logger = logging.getLogger("mesh_calculator")
+_mesh_calc_logger.setLevel(_mesh_log_level())
+if not any(getattr(h, "_is_mesh_sse_handler", False) for h in _mesh_calc_logger.handlers):
+    _mesh_calc_logger.addHandler(_queue_handler)
+if not any(getattr(h, "_is_mesh_stdout_handler", False) for h in _mesh_calc_logger.handlers):
+    _mesh_calc_logger.addHandler(_stdout_mesh_handler)
+_mesh_calc_logger.propagate = False
 
 app = _create_base_app()
 _app_state: AppState = app.extensions["app_state"]
