@@ -49,6 +49,7 @@ curl http://127.0.0.1:8000/api/v2/health
 - `POST /api/v2/run-optimization` now returns `log_file` with the exact path.
 
 Server stdout is the terminal where you launched `uv run mesh-web` (or `uvicorn`).
+`mesh_calculator.*` logs now stream there explicitly at `LOG_LEVEL` (default `INFO`).
 
 Examples:
 
@@ -58,4 +59,10 @@ uv run mesh-web 2>&1 | tee /tmp/mesh-web.log
 
 # Follow saved process output
 tail -f /tmp/mesh-web.log
+```
+
+Set a different log level:
+
+```bash
+LOG_LEVEL=DEBUG uv run mesh-web
 ```
