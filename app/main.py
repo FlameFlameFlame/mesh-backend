@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from starlette.middleware.wsgi import WSGIMiddleware
+from a2wsgi import WSGIMiddleware
 
 from generator import app as generator_app_mod
 
