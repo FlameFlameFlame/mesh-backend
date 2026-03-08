@@ -20,6 +20,9 @@ dependencies = [
   "mesh-calculator",
 ]
 
+[project.scripts]
+mesh-web = "app.run_web:main"
+
 [dependency-groups]
 dev = [
   "pytest>=8.0.0",

@@ -13,6 +13,20 @@ Backend service for the mesh planner UI and calculation APIs.
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
+## One-command Run (build frontend + start backend)
+
+```bash
+uv run mesh-web
+```
+
+Optional flags:
+
+```bash
+uv run mesh-web --host 127.0.0.1 --port 8000
+uv run mesh-web --skip-build
+uv run mesh-web --frontend-dir /path/to/mesh-generator
+```
+
 ## Serve a specific frontend build
 
 ```bash
