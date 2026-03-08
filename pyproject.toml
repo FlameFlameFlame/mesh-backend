@@ -2,7 +2,7 @@
 name = "mesh-backend"
 version = "0.1.0"
 description = "FastAPI backend for mesh network tower placement optimizer"
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.11,<4.0"
 dependencies = [
   "fastapi>=0.110.0",
   "flask>=3.0",
