@@ -1,5 +1,6 @@
 # Change Summary
 
+- 2026-03-08: Optimization jobs now write per-run log files under `<project_dir>/logs/optimization_*.log`; `/api/v2/run-optimization` response includes `log_file` path, and `OptimizationJobManager` now mirrors streamed events/logs to disk.
 - 2026-03-08: Added `uv run mesh-web` command (`app/run_web.py`) to build frontend (`mesh-generator`) and start backend (`uvicorn app.main:app`) in one step; supports `--skip-build`, custom host/port, and custom frontend path.
 - 2026-03-08: Added a full `/api/v2` backend compatibility layer by vendoring the former `mesh-generator` Flask backend package into `mesh-backend` and mounting it behind FastAPI via WSGI path translation.
 - 2026-03-08: Added backend static frontend serving (`FRONTEND_DIST_DIR`, defaulting to `../mesh-generator/dist`) so one host can serve both UI and `/api/v2`.

@@ -41,3 +41,21 @@ Then open `http://127.0.0.1:8000`.
 ```bash
 curl http://127.0.0.1:8000/api/v2/health
 ```
+
+## Optimization Logs
+
+- Live UI stream: Optimization panel -> Optimization Log.
+- Per-run file logs: saved under `<project_dir>/logs/optimization_*.log`.
+- `POST /api/v2/run-optimization` now returns `log_file` with the exact path.
+
+Server stdout is the terminal where you launched `uv run mesh-web` (or `uvicorn`).
+
+Examples:
+
+```bash
+# Save stdout/stderr to a file while still seeing it in terminal
+uv run mesh-web 2>&1 | tee /tmp/mesh-web.log
+
+# Follow saved process output
+tail -f /tmp/mesh-web.log
+```
