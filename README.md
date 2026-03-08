@@ -1,0 +1,29 @@
+# mesh-backend
+
+Backend service for the mesh planner UI and calculation APIs.
+
+## What it serves
+
+- `/api/v2/*` endpoints (projects, sites, pipeline, optimization, coverage, load/export, SSE)
+- Frontend static assets from `FRONTEND_DIST_DIR` (or `../mesh-generator/dist` by default)
+
+## Run
+
+```bash
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+## Serve a specific frontend build
+
+```bash
+FRONTEND_DIST_DIR=/Users/timur/Documents/src/LoraMeshPlanner/mesh-generator/dist \
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Then open `http://127.0.0.1:8000`.
+
+## Health check
+
+```bash
+curl http://127.0.0.1:8000/api/v2/health
+```
