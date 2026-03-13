@@ -217,6 +217,61 @@ class _QueueLogHandler(logging.Handler):
                 msg = f'[{label}] {msg}'
             _job_manager.put(msg)
 
+
+def _humanize_mesh_payload(raw_msg, rendered_msg: str) -> str:
+    payload = None
+    if isinstance(raw_msg, dict):
+        payload = dict(raw_msg)
+    elif isinstance(rendered_msg, str):
+        candidate = rendered_msg.strip()
+        if candidate.startswith("{") and candidate.endswith("}"):
+            try:
+                decoded = json.loads(candidate)
+                if isinstance(decoded, dict):
+                    payload = decoded
+            except Exception:
+                payload = None
+
+    if not isinstance(payload, dict):
+        return rendered_msg
+
+    event = None
+    for key in ("event", "message", "msg"):
+        value = payload.pop(key, None)
+        if value:
+            event = str(value)
+            break
+    if not event:
+        event = "mesh_calculator"
+    if not payload:
+        return event
+
+    parts = []
+    for key in sorted(payload):
+        value = payload[key]
+        if isinstance(value, str):
+            rendered_value = value
+        else:
+            rendered_value = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        parts.append(f"{key}={rendered_value}")
+    return f"{event} ({', '.join(parts)})"
+
+
+class _MeshStdoutFormatter(logging.Formatter):
+    """Render mesh_calculator structured payloads as readable one-line messages."""
+
+    def format(self, record):
+        original_msg, original_args = record.msg, record.args
+        try:
+            rendered_msg = record.getMessage()
+            record.msg = _humanize_mesh_payload(original_msg, rendered_msg)
+            record.args = ()
+            return super().format(record)
+        finally:
+            record.msg = original_msg
+            record.args = original_args
+
+
 def _mesh_log_level() -> int:
     raw = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
     return getattr(logging, raw, logging.INFO)
@@ -228,9 +283,7 @@ _queue_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
 _queue_handler._is_mesh_sse_handler = True  # type: ignore[attr-defined]
 
 _stdout_mesh_handler = logging.StreamHandler(stream=sys.stdout)
-_stdout_mesh_handler.setFormatter(
-    logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
-)
+_stdout_mesh_handler.setFormatter(_MeshStdoutFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
 _stdout_mesh_handler._is_mesh_stdout_handler = True  # type: ignore[attr-defined]
 
 _mesh_calc_logger = logging.getLogger("mesh_calculator")
