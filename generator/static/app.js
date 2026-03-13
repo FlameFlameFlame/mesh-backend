@@ -86,7 +86,16 @@ const _GRID_VIEWPORT_MAX_CELLS = 12000;
 const _BASE_H3_RESOLUTION = 8;
 const _OPT_PROGRESS_ALGOS = ['dp'];
 let _optProgressState = {
-  dp: {percent: 0, label: 'Queued…', error: false},
+  dp: {
+    percent: 0,
+    label: 'Queued…',
+    error: false,
+    stage: '',
+    stagePairPercent: 0,
+    stagePairLabel: 'Pairs: waiting for stage data…',
+    stagePairCompleted: 0,
+    stagePairTotal: 0,
+  },
 };
 let _optEventSource = null;
 let _optCancelInFlight = false;
@@ -189,28 +198,74 @@ function _titleCaseAlgo(algo) {
   return algo === 'dp' ? 'DP' : String(algo || '').toUpperCase();
 }
 
-function _setOptimizationProgressRow(algo, percent, label, hasError) {
+function _extractStagePairProgress(progress) {
+  let keyPairs = [
+    ['stage_pairs_completed', 'stage_pairs_total'],
+    ['pairs_completed', 'pairs_total'],
+    ['los_pairs_completed', 'los_pairs_total'],
+  ];
+  for (let i = 0; i < keyPairs.length; i++) {
+    let pair = keyPairs[i];
+    let completed = Number(progress[pair[0]]);
+    let total = Number(progress[pair[1]]);
+    if (!Number.isFinite(completed) || !Number.isFinite(total) || total <= 0) continue;
+    let done = Math.max(0, Math.min(Math.trunc(completed), Math.trunc(total)));
+    let all = Math.max(0, Math.trunc(total));
+    if (all <= 0) continue;
+    return {
+      completed: done,
+      total: all,
+      percent: (100.0 * done) / all,
+    };
+  }
+  return null;
+}
+
+function _setOptimizationProgressRow(algo, percent, label, hasError, stagePairPercent, stagePairLabel) {
   let bar = document.getElementById('opt-progress-bar-' + algo);
   let pct = document.getElementById('opt-progress-pct-' + algo);
   let lbl = document.getElementById('opt-progress-label-' + algo);
+  let pairBar = document.getElementById('opt-stage-progress-bar-' + algo);
+  let pairPct = document.getElementById('opt-stage-progress-pct-' + algo);
+  let pairLbl = document.getElementById('opt-stage-progress-label-' + algo);
   let row = document.getElementById('opt-progress-row-' + algo);
-  if (!bar || !pct || !lbl || !row) return;
+  if (!bar || !pct || !lbl || !row || !pairBar || !pairPct || !pairLbl) return;
   let val = Math.max(0, Math.min(100, percent || 0));
+  let stageVal = Math.max(0, Math.min(100, stagePairPercent || 0));
   bar.value = val;
   pct.textContent = Math.round(val) + '%';
   lbl.textContent = label || 'Running…';
+  pairBar.value = stageVal;
+  pairPct.textContent = Math.round(stageVal) + '%';
+  pairLbl.textContent = stagePairLabel || 'Pairs: waiting for stage data…';
   if (hasError) row.classList.add('error');
   else row.classList.remove('error');
 }
 
 function _resetOptimizationProgressUI() {
   _optProgressState = {
-    dp: {percent: 0, label: 'Queued…', error: false},
+    dp: {
+      percent: 0,
+      label: 'Queued…',
+      error: false,
+      stage: '',
+      stagePairPercent: 0,
+      stagePairLabel: 'Pairs: waiting for stage data…',
+      stagePairCompleted: 0,
+      stagePairTotal: 0,
+    },
   };
   let panel = document.getElementById('opt-progress-panel');
   if (panel) panel.style.display = 'grid';
   _OPT_PROGRESS_ALGOS.forEach(function(algo) {
-    _setOptimizationProgressRow(algo, 0, 'Queued…', false);
+    _setOptimizationProgressRow(
+      algo,
+      0,
+      'Queued…',
+      false,
+      0,
+      'Pairs: waiting for stage data…'
+    );
   });
 }
 
@@ -241,7 +296,16 @@ function _formatOptimizationProgressLabel(progress) {
 function _handleOptimizationProgress(progress) {
   if (!progress || typeof progress !== 'object') return;
   let algo = 'dp';
-  let prev = _optProgressState[algo] || {percent: 0, label: 'Queued…', error: false};
+  let prev = _optProgressState[algo] || {
+    percent: 0,
+    label: 'Queued…',
+    error: false,
+    stage: '',
+    stagePairPercent: 0,
+    stagePairLabel: 'Pairs: waiting for stage data…',
+    stagePairCompleted: 0,
+    stagePairTotal: 0,
+  };
   let rawPct = Number(progress.percent);
   let pct = Number.isFinite(rawPct) ? rawPct : prev.percent;
   let stage = String(progress.stage || '').toLowerCase();
@@ -252,8 +316,43 @@ function _handleOptimizationProgress(progress) {
   }
   let hasError = stage === 'error';
   let label = _formatOptimizationProgressLabel(progress);
-  _optProgressState[algo] = {percent: pct, label: label, error: hasError};
-  _setOptimizationProgressRow(algo, pct, label, hasError);
+  let stagePairPercent = prev.stagePairPercent || 0;
+  let stagePairLabel = prev.stagePairLabel || 'Pairs: waiting for stage data…';
+  let stagePairCompleted = prev.stagePairCompleted || 0;
+  let stagePairTotal = prev.stagePairTotal || 0;
+  let pairProgress = _extractStagePairProgress(progress);
+  let stageChanged = stage !== prev.stage;
+  if (pairProgress) {
+    stagePairCompleted = pairProgress.completed;
+    stagePairTotal = pairProgress.total;
+    stagePairPercent = pairProgress.percent;
+    if (!stageChanged && stage !== 'error') {
+      stagePairPercent = Math.max(prev.stagePairPercent || 0, stagePairPercent);
+    }
+    stagePairLabel = 'Pairs: ' + stagePairCompleted + '/' + stagePairTotal;
+  } else if (stageChanged) {
+    if (stage === 'done' && stagePairTotal > 0) {
+      stagePairCompleted = stagePairTotal;
+      stagePairPercent = 100;
+      stagePairLabel = 'Pairs: ' + stagePairTotal + '/' + stagePairTotal;
+    } else {
+      stagePairCompleted = 0;
+      stagePairTotal = 0;
+      stagePairPercent = 0;
+      stagePairLabel = 'Pairs: n/a for stage "' + (stage || 'unknown') + '"';
+    }
+  }
+  _optProgressState[algo] = {
+    percent: pct,
+    label: label,
+    error: hasError,
+    stage: stage,
+    stagePairPercent: stagePairPercent,
+    stagePairLabel: stagePairLabel,
+    stagePairCompleted: stagePairCompleted,
+    stagePairTotal: stagePairTotal,
+  };
+  _setOptimizationProgressRow(algo, pct, label, hasError, stagePairPercent, stagePairLabel);
 }
 
 // Viridis-like 5-stop color scale
@@ -1236,7 +1335,10 @@ function doLoadSelectedRun() {
   }).then(safeJson).then(function(data) {
     if (data.error) { alert(data.error); return; }
     renderLayers(data.layers || {});
-    if (data.report) showReport(data.report);
+    if (data.report) {
+      let runFinalReport = data.final_report || (((data.summary || {}).final_report) || null);
+      showReport(data.report, runFinalReport);
+    }
     hasCoverage = data.has_coverage || false;
     coverageFetched = false;
     coverageData = null;
@@ -1943,7 +2045,10 @@ function _loadProjectFromPath(configPath, onLoaded) {
     refresh();
     renderLayers(data.layers || {});
     if (data.output_dir) document.getElementById('output-dir').value = data.output_dir;
-    if (data.report) showReport(data.report);
+    if (data.report) {
+      let finalReport = data.final_report || (((((data.project_status || {}).last_optimization_run || {}).summary) || {}).final_report) || null;
+      showReport(data.report, finalReport);
+    }
     applyProjectStatus(data.project_status, data);
     _autoCoverageModeFromCurrentState(true);
     setStatus('Restoring previous route selections…');
@@ -2616,7 +2721,26 @@ function showTowerLegend(sourceCounts) {
   document.getElementById('tower-legend').style.display = 'block';
 }
 
-function showReport(report) {
+function _appendReportRow(table, label, value) {
+  let tr = document.createElement('tr');
+  tr.innerHTML = '<td>' + label + '</td><td>' + value + '</td>';
+  table.appendChild(tr);
+}
+
+function _reportHeaderRow(table, label) {
+  let tr = document.createElement('tr');
+  tr.innerHTML = '<td colspan="2" style="padding-top:8px;font-weight:700;">' + label + '</td>';
+  table.appendChild(tr);
+}
+
+function _fmtTimeSec(value, digits) {
+  let num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  let d = Number.isFinite(digits) ? digits : 3;
+  return num.toFixed(d);
+}
+
+function showReport(report, finalReport) {
   let table = document.getElementById('report-table');
   table.innerHTML = '';
   let rows = [
@@ -2631,10 +2755,36 @@ function showReport(report) {
     }
   }
   rows.forEach(([label, val]) => {
-    let tr = document.createElement('tr');
-    tr.innerHTML = '<td>' + label + '</td><td>' + val + '</td>';
-    table.appendChild(tr);
+    _appendReportRow(table, label, val);
   });
+
+  if (finalReport && typeof finalReport === 'object') {
+    _reportHeaderRow(table, 'Final Report');
+    let stage = finalReport.stage_timings_s || {};
+    _appendReportRow(table, 'Stage total time (s)', _fmtTimeSec(stage.total || finalReport.total_time_spent_s, 3));
+    _appendReportRow(table, '  route (s)', _fmtTimeSec(stage.route, 3));
+    _appendReportRow(table, '  visibility (s)', _fmtTimeSec(stage.visibility, 3));
+    _appendReportRow(table, '  city_links (s)', _fmtTimeSec(stage.city_links, 3));
+    _appendReportRow(table, '  export (s)', _fmtTimeSec(stage.export, 3));
+
+    let cells = finalReport.cells_calculated || {};
+    _appendReportRow(table, 'Cells final total', cells.total_cells_final ?? '-');
+    _appendReportRow(table, 'Cells prepared total', cells.prepared_cells_total ?? '-');
+    _appendReportRow(table, 'Cells corridor total', cells.corridor_cells_total ?? '-');
+
+    let pairs = finalReport.pairs_calculated || {};
+    _appendReportRow(table, 'Pairs requested', pairs.pairs_requested ?? '-');
+    _appendReportRow(table, 'Pairs unique', pairs.unique_pairs ?? '-');
+    _appendReportRow(table, 'Pairs computed', pairs.pairs_computed ?? '-');
+    _appendReportRow(table, 'Pairs failed', pairs.pairs_failed ?? '-');
+
+    let tp = (finalReport.time_per_pair_s || {}).overall || {};
+    _appendReportRow(table, 'Time/pair avg (s)', _fmtTimeSec(tp.avg_s, 6));
+    _appendReportRow(table, 'Time/pair min (s)', _fmtTimeSec(tp.min_s, 6));
+    _appendReportRow(table, 'Time/pair max (s)', _fmtTimeSec(tp.max_s, 6));
+    _appendReportRow(table, 'Time/pair median (s)', _fmtTimeSec(tp.median_s, 6));
+    _appendReportRow(table, 'Pair-time total (s)', _fmtTimeSec(tp.total_time_s, 3));
+  }
   document.getElementById('report-panel').style.display = 'block';
 }
 
@@ -3789,7 +3939,7 @@ function _renderOptimizationResult(res) {
         acc[r.route_id] = (r.towers_new || 0) + (r.towers_reused || 0);
         return acc;
       }, {}),
-    });
+    }, dpData.final_report || dpSummary.final_report || null);
   }
   saveProjectState(null);
 }
@@ -3901,11 +4051,14 @@ function doRunOptimization() {
         _optCancelInFlight = false;
         setStatus(d.message || 'Optimization canceled.');
         _OPT_PROGRESS_ALGOS.forEach(function(algo) {
+          let st = _optProgressState[algo] || {};
           _setOptimizationProgressRow(
             algo,
-            _optProgressState[algo].percent,
+            st.percent || 0,
             'Canceled by user',
-            true
+            true,
+            st.stagePairPercent || 0,
+            st.stagePairLabel || 'Pairs: waiting for stage data…'
           );
         });
       }
@@ -3915,7 +4068,15 @@ function doRunOptimization() {
         _setOptimizationRunUiState(false);
         _optCancelInFlight = false;
         _OPT_PROGRESS_ALGOS.forEach(function(algo) {
-          _setOptimizationProgressRow(algo, _optProgressState[algo].percent, 'Error: ' + d.error, true);
+          let st = _optProgressState[algo] || {};
+          _setOptimizationProgressRow(
+            algo,
+            st.percent || 0,
+            'Error: ' + d.error,
+            true,
+            st.stagePairPercent || 0,
+            st.stagePairLabel || 'Pairs: waiting for stage data…'
+          );
         });
         setStatus('Optimization error: ' + d.error);
       }
