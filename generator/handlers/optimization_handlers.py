@@ -271,8 +271,12 @@ def run_optimization(app_mod):
         finally:
             app_mod._job_manager.mark_finished()
             app_mod._opt_running = False
+            if getattr(app_mod, "_opt_thread", None) is threading.current_thread():
+                app_mod._opt_thread = None
 
-    threading.Thread(target=_run_pipeline, daemon=True).start()
+    worker = threading.Thread(target=_run_pipeline, daemon=True)
+    app_mod._opt_thread = worker
+    worker.start()
     return jsonify({
         "started": True,
         "warning": low_mast_warning,

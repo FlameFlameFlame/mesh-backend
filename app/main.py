@@ -1,4 +1,5 @@
 import os
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from a2wsgi import WSGIMiddleware
 from generator import app as generator_app_mod
 
 from .logging_config import setup_logging
+
+logger = logging.getLogger(__name__)
 
 
 class _ApiV2PathAdapter:
@@ -71,7 +74,19 @@ def _serve_frontend(app: FastAPI, rel_path: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    yield
+    try:
+        yield
+    finally:
+        try:
+            timeout_s = float((os.getenv("OPTIMIZATION_SHUTDOWN_TIMEOUT_S") or "10").strip())
+        except (TypeError, ValueError):
+            timeout_s = 10.0
+        canceled = generator_app_mod.request_cancel_running_optimization(
+            reason="app shutdown",
+            wait_timeout_s=max(0.0, timeout_s),
+        )
+        if canceled:
+            logger.info("Requested optimization cancellation during app shutdown")
 
 
 def create_app() -> FastAPI:

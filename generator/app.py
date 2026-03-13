@@ -201,6 +201,7 @@ def _write_status_json(output_dir: str, **kwargs) -> None:
 _opt_result = {}  # stores final optimization result for the stream endpoint
 _opt_running = False
 _opt_cancel_requested = False
+_opt_thread = None  # background optimization worker thread (if running)
 _thread_local = threading.local()  # per-thread strategy label for log prefixing
 _LOW_MAST_WARN_THRESHOLD_M = 5.0
 
@@ -584,6 +585,34 @@ def run_optimization():
 
 def cancel_optimization():
     return optimization_handlers.cancel_optimization(app_mod=sys.modules[__name__])
+
+def request_cancel_running_optimization(*, reason: str = "shutdown", wait_timeout_s: float = 10.0) -> bool:
+    """Best-effort cooperative cancellation for an active optimization worker."""
+    global _opt_cancel_requested
+
+    if not _job_manager.is_running:
+        return False
+
+    requested = _job_manager.request_cancel()
+    if not requested:
+        return False
+
+    _opt_cancel_requested = True
+    logger.info("Optimization cancel requested (%s)", reason)
+
+    worker = _opt_thread
+    if worker is not None and worker.is_alive():
+        timeout = max(0.0, float(wait_timeout_s))
+        worker.join(timeout=timeout)
+        if worker.is_alive():
+            logger.warning(
+                "Optimization worker still running after %.1fs during %s",
+                timeout,
+                reason,
+            )
+        else:
+            logger.info("Optimization worker stopped before shutdown")
+    return True
 
 def get_optimization_result():
     return optimization_handlers.get_optimization_result(app_mod=sys.modules[__name__])

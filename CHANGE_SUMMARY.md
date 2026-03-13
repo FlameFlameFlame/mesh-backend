@@ -1,5 +1,6 @@
 # Change Summary
 
+- 2026-03-14: Added cooperative optimization shutdown handling so backend exit requests cancel any running calculation before process teardown: optimization worker thread is now tracked (`_opt_thread`), FastAPI lifespan shutdown calls `generator.app.request_cancel_running_optimization(...)`, and cancellation waits briefly (`OPTIMIZATION_SHUTDOWN_TIMEOUT_S`, default 10s) for clean stop.
 - 2026-03-08: Switched FastAPI-to-Flask adapter from deprecated `starlette.middleware.wsgi.WSGIMiddleware` to `a2wsgi.WSGIMiddleware` to improve SSE delivery behavior (live optimization log streaming) and remove deprecation risk.
 - 2026-03-08: Added explicit `mesh_calculator` stdout streaming in backend runtime by attaching a dedicated stdout handler to the `mesh_calculator` logger (plus existing SSE handler), respecting `LOG_LEVEL` (default `INFO`) so optimization internals are visible in the backend terminal output.
 - 2026-03-08: Optimization jobs now write per-run log files under `<project_dir>/logs/optimization_*.log`; `/api/v2/run-optimization` response includes `log_file` path, and `OptimizationJobManager` now mirrors streamed events/logs to disk.
