@@ -92,7 +92,9 @@ let _optProgressState = {
     error: false,
     stage: '',
     stagePairPercent: 0,
-    stagePairLabel: 'Pairs: waiting for stage data…',
+    stagePairLabel: 'Pruning pairs: waiting for progress…',
+    stagePairTitle: 'Cell-pair pruning',
+    stagePairSource: 'none',
     stagePairCompleted: 0,
     stagePairTotal: 0,
   },
@@ -221,23 +223,87 @@ function _extractStagePairProgress(progress) {
   return null;
 }
 
-function _setOptimizationProgressRow(algo, percent, label, hasError, stagePairPercent, stagePairLabel) {
+function _extractIntFieldFromLogLine(line, key) {
+  if (typeof line !== 'string' || !line) return null;
+  let pattern = new RegExp("['\"]?" + key + "['\"]?\\s*[:=]\\s*(-?\\d+)", 'i');
+  let match = line.match(pattern);
+  if (!match) return null;
+  let value = Number(match[1]);
+  if (!Number.isFinite(value)) return null;
+  return Math.trunc(value);
+}
+
+function _handleOptimizationPruningLog(logLine) {
+  if (typeof logLine !== 'string') return;
+  let lower = logLine.toLowerCase();
+  if (lower.indexOf('prefilter') === -1 || lower.indexOf('pair') === -1) return;
+
+  let total = _extractIntFieldFromLogLine(logLine, 'pairs_to_filter_total_upper_bound');
+  if (!Number.isFinite(total) || total <= 0) {
+    total = _extractIntFieldFromLogLine(logLine, 'total_forward_pairs');
+  }
+  if (!Number.isFinite(total) || total <= 0) return;
+
+  let processed = _extractIntFieldFromLogLine(logLine, 'pairs_processed');
+  if (!Number.isFinite(processed) || processed < 0) {
+    if (lower.indexOf('start') !== -1) processed = 0;
+    else if (lower.indexOf('complete') !== -1 || lower.indexOf('summary') !== -1) processed = total;
+    else processed = null;
+  }
+  if (!Number.isFinite(processed)) return;
+
+  processed = Math.max(0, Math.min(Math.trunc(processed), Math.trunc(total)));
+  let percent = total > 0 ? (100.0 * processed) / total : 0;
+  let feasible = _extractIntFieldFromLogLine(logLine, 'feasible_pairs');
+  let label = 'Pruning pairs: ' + processed + '/' + total;
+  if (Number.isFinite(feasible) && feasible >= 0) {
+    label += ' • feasible ' + feasible;
+  }
+
+  let algo = 'dp';
+  let prev = _optProgressState[algo] || {};
+  _optProgressState[algo] = {
+    percent: prev.percent || 0,
+    label: prev.label || 'Running…',
+    error: !!prev.error,
+    stage: prev.stage || '',
+    stagePairPercent: percent,
+    stagePairLabel: label,
+    stagePairTitle: 'Cell-pair pruning',
+    stagePairSource: 'pruning_log',
+    stagePairCompleted: processed,
+    stagePairTotal: total,
+  };
+  _setOptimizationProgressRow(
+    algo,
+    prev.percent || 0,
+    prev.label || 'Running…',
+    !!prev.error,
+    percent,
+    label,
+    'Cell-pair pruning'
+  );
+}
+
+function _setOptimizationProgressRow(algo, percent, label, hasError, stagePairPercent, stagePairLabel, stagePairTitle) {
   let bar = document.getElementById('opt-progress-bar-' + algo);
   let pct = document.getElementById('opt-progress-pct-' + algo);
   let lbl = document.getElementById('opt-progress-label-' + algo);
+  let pairTitle = document.getElementById('opt-stage-progress-title-' + algo);
   let pairBar = document.getElementById('opt-stage-progress-bar-' + algo);
   let pairPct = document.getElementById('opt-stage-progress-pct-' + algo);
   let pairLbl = document.getElementById('opt-stage-progress-label-' + algo);
   let row = document.getElementById('opt-progress-row-' + algo);
-  if (!bar || !pct || !lbl || !row || !pairBar || !pairPct || !pairLbl) return;
+  if (!bar || !pct || !lbl || !row || !pairTitle || !pairBar || !pairPct || !pairLbl) return;
   let val = Math.max(0, Math.min(100, percent || 0));
   let stageVal = Math.max(0, Math.min(100, stagePairPercent || 0));
   bar.value = val;
   pct.textContent = Math.round(val) + '%';
   lbl.textContent = label || 'Running…';
+  pairTitle.textContent = stagePairTitle || 'Cell-pair pruning';
   pairBar.value = stageVal;
   pairPct.textContent = Math.round(stageVal) + '%';
-  pairLbl.textContent = stagePairLabel || 'Pairs: waiting for stage data…';
+  pairLbl.textContent = stagePairLabel || 'Pruning pairs: waiting for progress…';
   if (hasError) row.classList.add('error');
   else row.classList.remove('error');
 }
@@ -250,7 +316,9 @@ function _resetOptimizationProgressUI() {
       error: false,
       stage: '',
       stagePairPercent: 0,
-      stagePairLabel: 'Pairs: waiting for stage data…',
+      stagePairLabel: 'Pruning pairs: waiting for progress…',
+      stagePairTitle: 'Cell-pair pruning',
+      stagePairSource: 'none',
       stagePairCompleted: 0,
       stagePairTotal: 0,
     },
@@ -264,7 +332,8 @@ function _resetOptimizationProgressUI() {
       'Queued…',
       false,
       0,
-      'Pairs: waiting for stage data…'
+      'Pruning pairs: waiting for progress…',
+      'Cell-pair pruning'
     );
   });
 }
@@ -302,7 +371,9 @@ function _handleOptimizationProgress(progress) {
     error: false,
     stage: '',
     stagePairPercent: 0,
-    stagePairLabel: 'Pairs: waiting for stage data…',
+    stagePairLabel: 'Pruning pairs: waiting for progress…',
+    stagePairTitle: 'Cell-pair pruning',
+    stagePairSource: 'none',
     stagePairCompleted: 0,
     stagePairTotal: 0,
   };
@@ -317,20 +388,24 @@ function _handleOptimizationProgress(progress) {
   let hasError = stage === 'error';
   let label = _formatOptimizationProgressLabel(progress);
   let stagePairPercent = prev.stagePairPercent || 0;
-  let stagePairLabel = prev.stagePairLabel || 'Pairs: waiting for stage data…';
+  let stagePairLabel = prev.stagePairLabel || 'Pruning pairs: waiting for progress…';
+  let stagePairTitle = prev.stagePairTitle || 'Cell-pair pruning';
+  let stagePairSource = prev.stagePairSource || 'none';
   let stagePairCompleted = prev.stagePairCompleted || 0;
   let stagePairTotal = prev.stagePairTotal || 0;
   let pairProgress = _extractStagePairProgress(progress);
   let stageChanged = stage !== prev.stage;
-  if (pairProgress) {
+  if (pairProgress && stagePairSource !== 'pruning_log') {
     stagePairCompleted = pairProgress.completed;
     stagePairTotal = pairProgress.total;
     stagePairPercent = pairProgress.percent;
+    stagePairSource = 'progress_event';
+    stagePairTitle = 'Stage pair progress';
     if (!stageChanged && stage !== 'error') {
       stagePairPercent = Math.max(prev.stagePairPercent || 0, stagePairPercent);
     }
     stagePairLabel = 'Pairs: ' + stagePairCompleted + '/' + stagePairTotal;
-  } else if (stageChanged) {
+  } else if (stageChanged && stagePairSource !== 'pruning_log') {
     if (stage === 'done' && stagePairTotal > 0) {
       stagePairCompleted = stagePairTotal;
       stagePairPercent = 100;
@@ -340,7 +415,13 @@ function _handleOptimizationProgress(progress) {
       stagePairTotal = 0;
       stagePairPercent = 0;
       stagePairLabel = 'Pairs: n/a for stage "' + (stage || 'unknown') + '"';
+      stagePairSource = 'progress_event';
+      stagePairTitle = 'Stage pair progress';
     }
+  } else if (stage === 'done' && stagePairSource === 'pruning_log' && stagePairTotal > 0) {
+    stagePairCompleted = stagePairTotal;
+    stagePairPercent = 100;
+    stagePairLabel = 'Pruning pairs: ' + stagePairTotal + '/' + stagePairTotal + ' • done';
   }
   _optProgressState[algo] = {
     percent: pct,
@@ -349,10 +430,20 @@ function _handleOptimizationProgress(progress) {
     stage: stage,
     stagePairPercent: stagePairPercent,
     stagePairLabel: stagePairLabel,
+    stagePairTitle: stagePairTitle,
+    stagePairSource: stagePairSource,
     stagePairCompleted: stagePairCompleted,
     stagePairTotal: stagePairTotal,
   };
-  _setOptimizationProgressRow(algo, pct, label, hasError, stagePairPercent, stagePairLabel);
+  _setOptimizationProgressRow(
+    algo,
+    pct,
+    label,
+    hasError,
+    stagePairPercent,
+    stagePairLabel,
+    stagePairTitle
+  );
 }
 
 // Viridis-like 5-stop color scale
@@ -4029,6 +4120,7 @@ function doRunOptimization() {
       if (d.log) {
         logPre.textContent += d.log + '\n';
         logPre.scrollTop = logPre.scrollHeight;
+        _handleOptimizationPruningLog(d.log);
       }
       if (d.progress) {
         _handleOptimizationProgress(d.progress);
@@ -4058,7 +4150,8 @@ function doRunOptimization() {
             'Canceled by user',
             true,
             st.stagePairPercent || 0,
-            st.stagePairLabel || 'Pairs: waiting for stage data…'
+            st.stagePairLabel || 'Pruning pairs: waiting for progress…',
+            st.stagePairTitle || 'Cell-pair pruning'
           );
         });
       }
@@ -4075,7 +4168,8 @@ function doRunOptimization() {
             'Error: ' + d.error,
             true,
             st.stagePairPercent || 0,
-            st.stagePairLabel || 'Pairs: waiting for stage data…'
+            st.stagePairLabel || 'Pruning pairs: waiting for progress…',
+            st.stagePairTitle || 'Cell-pair pruning'
           );
         });
         setStatus('Optimization error: ' + d.error);
