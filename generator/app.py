@@ -145,7 +145,7 @@ def _collect_project_runs(project_dir: str) -> list[dict]:
     return runs
 
 def _load_run_outputs(project_dir: str, run_id: str) -> dict:
-    global _loaded_layers, _loaded_report, _loaded_coverage, _runtime_tower_coverage
+    global _loaded_layers, _loaded_report, _loaded_final_report, _loaded_coverage, _runtime_tower_coverage
     run_dir = os.path.join(project_dir, "runs", str(run_id))
     if not os.path.isdir(run_dir):
         raise FileNotFoundError(f"Run not found: {run_id}")
@@ -161,14 +161,20 @@ def _load_run_outputs(project_dir: str, run_id: str) -> dict:
             _loaded_layers.pop(layer_key, None)
 
     report = _read_json_if_exists(os.path.join(run_dir, "report.json"))
+    final_report = _read_json_if_exists(os.path.join(run_dir, "final_report.json"))
+    run_settings = _read_json_if_exists(os.path.join(run_dir, "run_settings.json")) or {}
+    summary = run_settings.get("summary", {}) if isinstance(run_settings, dict) else {}
     _loaded_report = report
+    _loaded_final_report = final_report
     _loaded_coverage = loaded_layers.get("coverage")
     _runtime_tower_coverage = None
 
     return {
         "run_id": str(run_id),
         "layers": loaded_layers,
+        "summary": summary,
         "report": report,
+        "final_report": final_report,
         "has_coverage": _loaded_coverage is not None,
     }
 
@@ -304,6 +310,7 @@ _loaded_layers = {}  # key -> geojson dict (roads, towers, boundary, edges)
 _roads_geojson = None  # stored roads from Generate or Load
 _full_roads_geojson = None  # full downloaded roads (never filtered by P2P)
 _loaded_report = None  # report.json dict from mesh-engine output
+_loaded_final_report = None  # final_report.json dict with stage/pair timing stats
 _loaded_coverage = None  # coverage.geojson dict (lazy-served)
 _runtime_tower_coverage = None  # runtime-only tower coverage FeatureCollection
 _elevation_path = None  # path to downloaded elevation GeoTIFF

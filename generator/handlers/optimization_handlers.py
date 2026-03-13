@@ -213,6 +213,16 @@ def run_optimization(app_mod):
             if os.path.isfile(report_path):
                 with open(report_path) as f:
                     result["report"] = json.load(f)
+            final_report_path = os.path.join(tmp_dir_dp, "final_report.json")
+            if os.path.isfile(final_report_path):
+                with open(final_report_path) as f:
+                    result["final_report"] = json.load(f)
+            elif isinstance(summary, dict):
+                final_report = summary.get("final_report")
+                if isinstance(final_report, dict):
+                    result["final_report"] = final_report
+                    with open(final_report_path, "w") as f:
+                        json.dump(final_report, f, indent=2)
             app_mod._job_manager.put({
                 "progress": {
                     "stage": "done",
@@ -234,6 +244,7 @@ def run_optimization(app_mod):
                 if key in result:
                     app_mod._loaded_layers[key] = result[key]
             app_mod._loaded_report = result.get("report")
+            app_mod._loaded_final_report = result.get("final_report")
 
             app_mod.logger.info(
                 "run_optimization complete: DP=%d towers/%d edges",

@@ -10,6 +10,7 @@ def _inject_globals(app_mod):
         "_roads_geojson",
         "_full_roads_geojson",
         "_loaded_report",
+        "_loaded_final_report",
         "_loaded_coverage",
         "_runtime_tower_coverage",
         "_elevation_path",
@@ -55,6 +56,7 @@ def _flush_globals(app_mod):
         "_roads_geojson",
         "_full_roads_geojson",
         "_loaded_report",
+        "_loaded_final_report",
         "_loaded_coverage",
         "_runtime_tower_coverage",
         "_elevation_path",
@@ -207,7 +209,7 @@ def detect_city_boundary(idx):
 def clear_project():
     """Clear in-memory project state (non-destructive; files on disk are preserved)."""
     global _counter, _roads_geojson, _full_roads_geojson, _loaded_layers, _loaded_report
-    global _loaded_coverage, _runtime_tower_coverage, _elevation_path, _p2p_routes, _p2p_all_route_features
+    global _loaded_final_report, _loaded_coverage, _runtime_tower_coverage, _elevation_path, _p2p_routes, _p2p_all_route_features
     global _p2p_display_features, _forced_waypoints, _grid_bundle_path, _grid_provider_summary
     global _active_mesh_parameters
     store._sites.clear()
@@ -216,6 +218,7 @@ def clear_project():
     _full_roads_geojson = None
     _loaded_layers = {}
     _loaded_report = None
+    _loaded_final_report = None
     _loaded_coverage = None
     _runtime_tower_coverage = None
     _p2p_routes = []
@@ -233,7 +236,7 @@ def clear_project():
 
 def clear_calculations():
     """Clear loaded calculation layers from memory without deleting files from disk."""
-    global _loaded_layers, _loaded_report, _loaded_coverage, _runtime_tower_coverage
+    global _loaded_layers, _loaded_report, _loaded_final_report, _loaded_coverage, _runtime_tower_coverage
     data = request.json or {}
     try:
         output_dir = _resolve_project_output_dir(data)
@@ -243,6 +246,7 @@ def clear_calculations():
     _loaded_layers.pop("edges", None)
     _loaded_layers.pop("coverage", None)
     _loaded_report = None
+    _loaded_final_report = None
     _loaded_coverage = None
     _runtime_tower_coverage = None
     logger.info("Cleared in-memory calculation layers (files preserved) for %s", output_dir)
@@ -454,6 +458,8 @@ def _persist_current_calculation_outputs(
 
     if _loaded_report is not None:
         payloads["report.json"] = _loaded_report
+    if _loaded_final_report is not None:
+        payloads["final_report.json"] = _loaded_final_report
 
     if not payloads:
         return None

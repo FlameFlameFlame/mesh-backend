@@ -323,11 +323,17 @@ def load_project(app_mod):
     app_mod._grid_provider_summary = ""
 
     app_mod._loaded_report = None
+    app_mod._loaded_final_report = None
     report_path = resolve(outputs.get("report"))
     if report_path and os.path.isfile(report_path):
         with open(report_path) as f:
             app_mod._loaded_report = json.load(f)
         app_mod.logger.info("Loaded report from %s", report_path)
+    final_report_path = os.path.join(config_dir, "final_report.json")
+    if os.path.isfile(final_report_path):
+        with open(final_report_path) as f:
+            app_mod._loaded_final_report = json.load(f)
+        app_mod.logger.info("Loaded final report from %s", final_report_path)
 
     app_mod._loaded_coverage = None
     coverage_path = resolve(outputs.get("coverage"))
@@ -471,6 +477,7 @@ def load_project(app_mod):
         "layers": layers,
         "bounds": bounds,
         "report": app_mod._loaded_report,
+        "final_report": app_mod._loaded_final_report,
         "has_coverage": app_mod._loaded_coverage is not None,
         "has_elevation": app_mod._elevation_path is not None and os.path.isfile(app_mod._elevation_path),
         "has_grid_provider": app_mod._grid_provider is not None,
