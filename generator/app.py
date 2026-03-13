@@ -250,6 +250,25 @@ def _humanize_mesh_payload(raw_msg, rendered_msg: str) -> str:
             break
     if not event:
         event = "mesh_calculator"
+
+    positional_args = payload.pop("positional_args", None)
+    if isinstance(positional_args, (list, tuple)) and positional_args:
+        try:
+            event = event % tuple(positional_args)
+        except Exception:
+            pass
+
+    for noisy in (
+        "level",
+        "logger",
+        "timestamp",
+        "exception",
+        "exc_info",
+        "stack_info",
+        "args",
+    ):
+        payload.pop(noisy, None)
+
     if not payload:
         return event
 
@@ -290,7 +309,7 @@ _queue_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
 _queue_handler._is_mesh_sse_handler = True  # type: ignore[attr-defined]
 
 _stdout_mesh_handler = logging.StreamHandler(stream=sys.stdout)
-_stdout_mesh_handler.setFormatter(_MeshStdoutFormatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+_stdout_mesh_handler.setFormatter(_MeshStdoutFormatter("%(levelname)s %(message)s"))
 _stdout_mesh_handler._is_mesh_stdout_handler = True  # type: ignore[attr-defined]
 
 _mesh_calc_logger = logging.getLogger("mesh_calculator")

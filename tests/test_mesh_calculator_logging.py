@@ -30,3 +30,25 @@ def test_mesh_stdout_formatter_humanizes_structured_payloads():
     assert "Route stats" in rendered
     assert "route_id=route_0" in rendered
     assert "score=0.97" in rendered
+
+
+def test_mesh_stdout_formatter_injects_positional_args_and_strips_noise():
+    formatter = _MeshStdoutFormatter("%(levelname)s %(message)s")
+    record = logging.LogRecord(
+        name="mesh_calculator.optimization.corridor",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg={
+            "event": "Injected %d buffer cells as corridor candidates",
+            "positional_args": [308],
+            "level": "info",
+            "logger": "mesh_calculator.optimization.corridor",
+            "timestamp": "2026-03-13T20:53:09.530701Z",
+        },
+        args=(),
+        exc_info=None,
+    )
+
+    rendered = formatter.format(record)
+    assert rendered == "INFO Injected 308 buffer cells as corridor candidates"
