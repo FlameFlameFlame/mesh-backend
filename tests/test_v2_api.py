@@ -1,4 +1,8 @@
+import json
+import logging
 from pathlib import Path
+
+import yaml
 
 import generator.app as generator_app_mod
 import generator.handlers.pipeline_site_handlers as pipeline_handlers
@@ -102,6 +106,70 @@ def test_sites_export_and_load(client):
     sites = client.get("/api/v2/sites")
     assert sites.status_code == 200
     assert sites.json() == []
+
+
+def test_export_and_load_strip_deprecated_los_parallel_workers(client, caplog):
+    create_project = client.post("/api/v2/projects/create", json={"name": "demo"})
+    assert create_project.status_code == 200
+
+    _add_site(client, "A", 40.1750, 44.5050)
+    _add_site(client, "B", 40.1810, 44.5110)
+
+    generator_app_mod._p2p_routes = [
+        {
+            "route_id": "route_0",
+            "site1": {"name": "A", "lat": 40.1750, "lon": 44.5050},
+            "site2": {"name": "B", "lat": 40.1810, "lon": 44.5110},
+        }
+    ]
+    generator_app_mod._p2p_all_route_features = {
+        "route_0": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[44.5050, 40.1750], [44.5110, 40.1810]],
+                },
+                "properties": {},
+            }
+        ]
+    }
+
+    caplog.set_level(logging.WARNING)
+    exported = client.post(
+        "/api/v2/export",
+        json={
+            "project_name": "demo",
+            "parameters": {
+                "max_towers_per_route": 5,
+                "los_parallel_workers": 8,
+            },
+        },
+    )
+    assert exported.status_code == 200
+
+    config_path = Path(exported.json()["config_path"])
+    with open(config_path) as f:
+        config_yaml = yaml.safe_load(f)
+    assert "los_parallel_workers" not in (config_yaml.get("parameters") or {})
+
+    routes_path = config_path.parent / "routes.json"
+    assert routes_path.is_file()
+    routes_payload = json.loads(routes_path.read_text())
+    assert "los_parallel_workers" not in (routes_payload.get("parameters") or {})
+
+    status_path = config_path.parent / "status.json"
+    assert status_path.is_file()
+    status_payload = json.loads(status_path.read_text())
+    assert "los_parallel_workers" not in (status_payload.get("parameters") or {})
+
+    loaded = client.post("/api/v2/load", json={"path": str(config_path)})
+    assert loaded.status_code == 200
+    project_status = loaded.json().get("project_status") or {}
+    assert "los_parallel_workers" not in (project_status.get("parameters") or {})
+
+    warning_text = "\\n".join(rec.getMessage() for rec in caplog.records)
+    assert "los_parallel_workers" in warning_text
 
 
 def test_generate_with_mocked_roads(client, monkeypatch):

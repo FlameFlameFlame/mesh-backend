@@ -209,7 +209,10 @@ def export(app_mod):
         city_boundaries_path = os.path.join(output_dir, "city_boundaries.geojson")
         app_mod.export_city_boundaries_geojson(sites, city_boundaries_path)
 
-    req_params = data.get("parameters", {})
+    req_params = app_mod._sanitize_deprecated_mesh_parameters(
+        data.get("parameters", {}),
+        source="export request",
+    )
     req_params.setdefault("max_towers_per_route", max_towers_per_route)
     active_routes = data.get("active_routes", {})
     forced_waypoints = data.get("forced_waypoints", {})
@@ -260,6 +263,10 @@ def load_project(app_mod):
     config_parameters = config.get("parameters", {})
     if not isinstance(config_parameters, dict):
         config_parameters = {}
+    config_parameters = app_mod._sanitize_deprecated_mesh_parameters(
+        config_parameters,
+        source="config.yaml parameters",
+    )
 
     def resolve(p):
         if not p:
@@ -387,6 +394,11 @@ def load_project(app_mod):
         with open(status_path) as f:
             project_status = json.load(f)
         app_mod.logger.info("Loaded project status from %s", status_path)
+        if isinstance(project_status.get("parameters"), dict):
+            project_status["parameters"] = app_mod._sanitize_deprecated_mesh_parameters(
+                project_status.get("parameters"),
+                source="status.json parameters",
+            )
         if not app_mod._elevation_path and project_status.get("elevation_path"):
             ep = project_status["elevation_path"]
             if os.path.isfile(ep):
@@ -447,6 +459,11 @@ def load_project(app_mod):
     if os.path.isfile(routes_file):
         with open(routes_file) as f:
             routes_data = json.load(f)
+        if isinstance(routes_data.get("parameters"), dict):
+            app_mod._sanitize_deprecated_mesh_parameters(
+                routes_data.get("parameters"),
+                source="routes.json parameters",
+            )
         for r in routes_data.get("routes", []):
             meta = {k: v for k, v in r.items() if k != "features"}
             app_mod._p2p_routes.append(meta)

@@ -3764,6 +3764,15 @@ function _beginBusyOverlay(msg) {
 
 // --- Run mesh_calculator optimization on selected routes ---
 
+function _sanitizeLegacyParallelSettings(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (Object.prototype.hasOwnProperty.call(s, 'los_parallel_workers')) {
+    delete s.los_parallel_workers;
+    try { console.warn('Ignoring deprecated setting: los_parallel_workers'); } catch (_e) {}
+  }
+  return s;
+}
+
 function getSettings() {
   let freqMhz = parseFloat(document.getElementById('set-frequency-mhz').value) || 868;
   let losPolicy = document.getElementById('set-los-policy').value || 'strict';
@@ -3782,6 +3791,7 @@ function getSettings() {
 
 function applySettings(s) {
   if (!s) return;
+  s = _sanitizeLegacyParallelSettings(s);
   if (s.frequency_hz != null) document.getElementById('set-frequency-mhz').value = Math.round(s.frequency_hz / 1e6);
   if (s.mast_height_m != null) document.getElementById('set-mast-height').value = s.mast_height_m;
   if (s.tx_power_mw != null) document.getElementById('set-tx-power-mw').value = s.tx_power_mw;

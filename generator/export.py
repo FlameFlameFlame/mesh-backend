@@ -9,7 +9,11 @@ from shapely.ops import unary_union
 from generator.models import SiteModel
 
 logger = logging.getLogger(__name__)
-_EXPORT_EXCLUDED_PARAMETER_KEYS = {"h3_resolution", "max_coverage_radius_m"}
+_EXPORT_EXCLUDED_PARAMETER_KEYS = {
+    "h3_resolution",
+    "max_coverage_radius_m",
+    "los_parallel_workers",
+}
 
 
 def export_sites_geojson(sites: list[SiteModel], path: str) -> None:

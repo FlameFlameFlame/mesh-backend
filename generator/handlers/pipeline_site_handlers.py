@@ -31,6 +31,7 @@ def _inject_globals(app_mod):
         "_build_grid_bundle_for_current_state",
         "_hydrate_grid_provider",
         "_normalize_mesh_parameters",
+        "_sanitize_deprecated_mesh_parameters",
         "_save_project_to_dir",
         "_project_dir",
         "_project_name_from_dir",
@@ -480,7 +481,10 @@ def _persist_current_calculation_outputs(
         "run_id": run_id,
         "source": source,
         "saved_at_utc": datetime.now(timezone.utc).isoformat(),
-        "parameters": dict(parameters or {}),
+        "parameters": _sanitize_deprecated_mesh_parameters(
+            parameters or {},
+            source="persisted run settings",
+        ),
         "summary": dict(summary or {}),
         "files": sorted(payloads.keys()),
     }
@@ -569,7 +573,10 @@ def _run_runtime_tower_coverage(sources_payload: list, body: dict):
     except ImportError as exc:
         return jsonify({"error": f"mesh_calculator import failed: {exc}"}), 500
 
-    params = body.get("parameters", {}) or {}
+    params = _sanitize_deprecated_mesh_parameters(
+        body.get("parameters", {}) or {},
+        source="tower coverage request",
+    )
     mesh_config = MeshConfig(**{
         k: v for k, v in params.items()
         if k in MeshConfig.__dataclass_fields__
@@ -757,7 +764,10 @@ def get_grid_layers():
         return jsonify({"error": "Grid provider is not ready. Download elevation first."}), 400
 
     body = request.json or {}
-    params = body.get("parameters") or {}
+    params = _sanitize_deprecated_mesh_parameters(
+        body.get("parameters") or {},
+        source="grid-layers request",
+    )
     viewport = body.get("viewport") if isinstance(body.get("viewport"), dict) else None
     include_full = bool(body.get("include_full", True))
     try:

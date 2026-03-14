@@ -49,6 +49,7 @@ from generator.roads import fetch_roads_cached
 from generator.elevation import fetch_and_write_elevation_cached, render_elevation_image
 
 logger = logging.getLogger(__name__)
+_DEPRECATED_MESH_PARAMETER_KEYS = {"los_parallel_workers"}
 
 _WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFAULT_OUTPUT_DIR = os.path.join(_WORKSPACE_ROOT, "projects")
@@ -111,7 +112,13 @@ def _collect_project_runs(project_dir: str) -> list[dict]:
     for item in runs_meta:
         run_id = (item or {}).get("run_id")
         if run_id:
-            by_id[str(run_id)] = dict(item)
+            normalized = dict(item)
+            if isinstance(normalized.get("parameters"), dict):
+                normalized["parameters"] = _sanitize_deprecated_mesh_parameters(
+                    normalized.get("parameters"),
+                    source=f"status optimization_runs[{run_id}]",
+                )
+            by_id[str(run_id)] = normalized
 
     runs_dir = os.path.join(project_dir, "runs")
     if os.path.isdir(runs_dir):
@@ -124,7 +131,10 @@ def _collect_project_runs(project_dir: str) -> list[dict]:
                 by_id[run_id] = {
                     "run_id": run_id,
                     "saved_at_utc": settings.get("saved_at_utc"),
-                    "parameters": settings.get("parameters", {}),
+                    "parameters": _sanitize_deprecated_mesh_parameters(
+                        settings.get("parameters", {}),
+                        source=f"run_settings.json ({run_id})",
+                    ),
                     "summary": settings.get("summary", {}),
                     "files": settings.get("files", []),
                     "source": settings.get("source", "optimization"),
@@ -133,7 +143,10 @@ def _collect_project_runs(project_dir: str) -> list[dict]:
                 if not by_id[run_id].get("saved_at_utc"):
                     by_id[run_id]["saved_at_utc"] = settings.get("saved_at_utc")
                 if not by_id[run_id].get("parameters"):
-                    by_id[run_id]["parameters"] = settings.get("parameters", {})
+                    by_id[run_id]["parameters"] = _sanitize_deprecated_mesh_parameters(
+                        settings.get("parameters", {}),
+                        source=f"run_settings.json ({run_id})",
+                    )
                 if not by_id[run_id].get("summary"):
                     by_id[run_id]["summary"] = settings.get("summary", {})
                 if not by_id[run_id].get("files"):
@@ -485,13 +498,31 @@ def _hydrate_grid_provider(bundle_path: str, elevation_path: str | None = None):
     res = _grid_provider.available_resolutions()
     _grid_provider_summary = f"res={','.join(str(r) for r in res)}" if res else ""
 
+def _sanitize_deprecated_mesh_parameters(params: dict | None, *, source: str) -> dict:
+    cleaned = dict(params or {})
+    removed = []
+    for key in sorted(_DEPRECATED_MESH_PARAMETER_KEYS):
+        if key in cleaned:
+            cleaned.pop(key, None)
+            removed.append(key)
+    if removed:
+        logger.warning(
+            "Ignoring deprecated mesh parameter(s) from %s: %s",
+            source,
+            ", ".join(removed),
+        )
+    return cleaned
+
 def _normalize_mesh_parameters(param_overrides: dict | None) -> dict:
     """
     Normalize optimization parameter overrides from UI.
 
     mesh-generator default is strict LOS unless explicitly overridden.
     """
-    params = dict(param_overrides or {})
+    params = _sanitize_deprecated_mesh_parameters(
+        param_overrides,
+        source="request parameters",
+    )
     # Base planning resolution is fixed to 8 in mesh-generator UI/workflow.
     params["h3_resolution"] = 8
     if "min_fresnel_clearance_m" not in params:
@@ -669,9 +700,15 @@ def _save_project_to_dir(
     }
     export_params = dict(default_params)
     if parameters:
-        export_params.update(parameters)
+        export_params.update(
+            _sanitize_deprecated_mesh_parameters(
+                parameters,
+                source="_save_project_to_dir parameters",
+            )
+        )
     export_params.pop("h3_resolution", None)
     export_params.pop("max_coverage_radius_m", None)
+    export_params.pop("los_parallel_workers", None)
 
     sites = list(store)
     sites_path = os.path.join(output_dir, "sites.geojson")
